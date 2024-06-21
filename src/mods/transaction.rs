@@ -1,12 +1,14 @@
 use super::{block, blockchain::Blockchain, utxo::UTXO};
+use crypto::{digest::Digest, sha2::Sha256};
 use serde::{Deserialize, Serialize};
+use core::hash;
 use std::collections::HashMap;
 
 //Transaction
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct Transaction {
-    inputs: Vec<UTXO>,  //input UTXO
-    outputs: Vec<UTXO>, //output UTXO
+    inputs: Vec<UTXO>,  //input UTXOs
+    outputs: Vec<UTXO>, //output UTXOs
 }
 
 
@@ -17,18 +19,17 @@ impl Transaction {
             return Err("No money");
         } else {
             let max_utxo = Transaction::max_in_hashmap(Transaction::check_utxo_from(from.clone(), blocks.clone()));
+            
             let mut input_txid: String;
             let mut input_amount: u64;
             for (k, v) in max_utxo {
                 input_txid = k;
                 input_amount = v;
-            }
-            let new_transaction: Transaction = Transaction { inputs: vec![
-                UTXO {txid: input_txid,
-                    outputs_idx: Transaction::get_input_idx(from.clone(), blocks.clone()),
-                    amount: input_amount,
-                    recipient: recipient }],
-                outputs: Transaction::generate_outputs_utxo(from.clone(), blocks.clone(), amount.clone(), recipient.clone()) };
+            };
+
+            let new_transaction: Transaction = Transaction {
+                inputs: Transaction::generate_input_utxos(from.clone(), blocks.clone(), amount.clone(), recipient.clone()),
+                outputs: Transaction::generate_outputs_utxos(from.clone(), blocks.clone(), amount.clone(), recipient.clone()) };
 
             return Ok(new_transaction);
         }
@@ -73,12 +74,22 @@ impl Transaction {
         new_map
     }
 
-    fn generate_txid(from: String, blocks: Blockchain) -> String {
-        let last_utxo = Transaction::get_last_utxo(from.clone(), blocks.clone());
-        let output_utxo_string = format!("{}{}{}{}");
+    fn generate_txid(from: String, blocks: Blockchain, input_utxo: UTXO) -> String {
+        let output_utxo_string = format!("{}{}{}{}",
+            input_utxo.txid,
+            input_utxo.outputs_idx,
+            input_utxo.amount,
+            input_utxo.recipient);
+        let mut hasher = Sha256::new();
+        hasher.input_str(&output_utxo_string);
+        hasher.result_str()
     }
 
-    fn generate_outputs_utxo(from: String, blocks: Blockchain, amount: u64, recipient: String) -> Vec<UTXO> {
+    fn generate_outputs_utxos(from: String, blocks: Blockchain, amount: u64, recipient: String) -> Vec<UTXO> {
+
+    }
+
+    fn generate_input_utxos(from: String, blocks: Blockchain, amount: u64, recipient: String) -> Vec<UTXO> {
 
     }
 
