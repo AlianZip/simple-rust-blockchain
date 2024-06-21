@@ -1,7 +1,6 @@
-use super::{block, blockchain::Blockchain, utxo::UTXO};
+use super::{blockchain::Blockchain, utxo::UTXO};
 use crypto::{digest::Digest, sha2::Sha256};
 use serde::{Deserialize, Serialize};
-use core::hash;
 use std::collections::HashMap;
 
 //Transaction
@@ -15,31 +14,28 @@ pub(crate) struct Transaction {
 
 impl Transaction {
     pub(crate) fn new(amount: u64, recipient: String, from: String, blocks: Blockchain) -> Result<Transaction, &'static str> {
-        if Transaction::check_utxo_from(from.clone(), blocks.clone()).is_empty() {
+        if Transaction::get_max_utxo(from.clone(), blocks.clone()).is_err() {
             return Err("No money");
         } else {
-            let max_utxo = Transaction::max_in_hashmap(Transaction::check_utxo_from(from.clone(), blocks.clone()));
+            let inputs = Transaction::generate_input_utxos(from.clone(), blocks.clone(), amount.clone()); 
             
-            let mut input_txid: String;
-            let mut input_amount: u64;
-            for (k, v) in max_utxo {
-                input_txid = k;
-                input_amount = v;
-            };
+            if inputs.is_ok() {
+                let new_transaction: Transaction = Transaction {
+                    inputs: inputs.unwrap(),
+                    outputs: Transaction::generate_outputs_utxos(from, blocks, amount, recipient) };
 
-            let new_transaction: Transaction = Transaction {
-                inputs: Transaction::generate_input_utxos(from.clone(), blocks.clone(), amount.clone(), recipient.clone()),
-                outputs: Transaction::generate_outputs_utxos(from.clone(), blocks.clone(), amount.clone(), recipient.clone()) };
-
-            return Ok(new_transaction);
+                return Ok(new_transaction);
+            } else {
+                Err("No money")
+            }
         }
     }
 
-    fn check_utxo_from(from: String, blocks: Blockchain) -> HashMap<String, u64>{ //return txid: amount
+    fn get_max_utxo(from: String, blocks: Blockchain) -> Result<UTXO, &'static str>{ //return txid: amount
         let mut utxos = HashMap::new();
         let mut del_utxos = Vec::new();
 
-        for block in blocks.chain {
+        for block in blocks.chain.clone() {
             for input in block.transaction.inputs {
                 if input.recipient == from {
                     del_utxos.push(input.txid)
@@ -47,7 +43,7 @@ impl Transaction {
             }
         }
 
-        for block in blocks.chain {
+        for block in blocks.chain.clone() {
             for output in block.transaction.outputs {
                 if output.recipient == from {
                     if !del_utxos.contains(&output.txid) {
@@ -56,7 +52,27 @@ impl Transaction {
                 }
             }
         }
-        utxos
+        
+        let max_utxo_hashmap = Transaction::max_in_hashmap(utxos);
+
+        let mut output_txid_max_utxo = String::new();
+        for (k, _) in max_utxo_hashmap {
+            output_txid_max_utxo = k;
+        };
+        
+        let max_utxo: UTXO;
+
+        for block in blocks.chain {
+            for output in block.transaction.outputs {
+                if output.txid == output_txid_max_utxo {
+                    max_utxo = output;
+                    return Ok(max_utxo);
+                }
+            }
+        }
+        
+        Err("No money")
+        
     }
 
     fn max_in_hashmap(hashmap: HashMap<String, u64>) -> HashMap<String, u64> {
@@ -74,10 +90,10 @@ impl Transaction {
         new_map
     }
 
-    fn generate_txid(from: String, blocks: Blockchain, input_utxo: UTXO) -> String {
+    fn generate_txid(from: String, input_utxo: UTXO, outputs_idx: u32) -> String {
         let output_utxo_string = format!("{}{}{}{}",
             input_utxo.txid,
-            input_utxo.outputs_idx,
+            outputs_idx,
             input_utxo.amount,
             input_utxo.recipient);
         let mut hasher = Sha256::new();
@@ -86,14 +102,29 @@ impl Transaction {
     }
 
     fn generate_outputs_utxos(from: String, blocks: Blockchain, amount: u64, recipient: String) -> Vec<UTXO> {
-
+        let max_utxo = Transaction::get_max_utxo(from.clone(), blocks.clone());
+        let remains = max_utxo.clone().unwrap().amount - amount;
+        vec![
+        UTXO {
+            txid: Transaction::generate_txid(from.clone(), max_utxo.clone().unwrap(), 0),
+            outputs_idx: 0,
+            amount: amount,
+            recipient: recipient,
+        },
+        UTXO {
+            txid: Transaction::generate_txid(from.clone(), max_utxo.unwrap(), 1),
+            outputs_idx: 1,
+            amount: remains,
+            recipient: from,
+        }]
     }
 
-    fn generate_input_utxos(from: String, blocks: Blockchain, amount: u64, recipient: String) -> Vec<UTXO> {
-
-    }
-
-    fn get_input_idx(from: String, blocks: Blockchain) -> u32 {
-
+    fn generate_input_utxos(from: String, blocks: Blockchain, amount: u64) -> Result<Vec<UTXO>, &'static str> {
+        let max_utxo = Transaction::get_max_utxo(from, blocks);
+        if max_utxo.clone().unwrap().amount < amount {
+            Err("No money")
+        } else {
+            Ok(vec![max_utxo.unwrap()])
+        }
     }
 }
