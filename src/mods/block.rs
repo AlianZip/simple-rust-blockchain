@@ -6,7 +6,7 @@ use serde_json::to_string;
 
 
 //Block struct
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Block {
     index: u32,                 //index of block
     timestamp: i64,             //time when block create

@@ -1,9 +1,9 @@
-use super::{block::Block, transaction::Transaction};
+use super::{block::Block, transaction::Transaction, utxo::UTXO};
 use serde::{Deserialize, Serialize};
 
 
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub(crate) struct Blockchain {
     pub(crate) chain: Vec<Block>,
 }
@@ -15,7 +15,7 @@ impl Blockchain {
         }
     }
 
-    pub fn new_transaction(mut self, amount: u64, recipient: String, from: String) -> Result<&'static str, &'static str> {
+    pub fn new_transaction(&mut self, amount: u64, recipient: String, from: String) -> Result<&'static str, &'static str> {
         let index = self.chain.len() as u32; //get last index
         let transaction = Transaction::new(amount, recipient, from, self.clone()); //new transaction in impl Transaction
         let preview_hash = if let Some(preview_block) = self.chain.last() {
@@ -30,5 +30,15 @@ impl Blockchain {
             return Err("No money");
         }
     }
-    
+
+    pub fn check_user_utxos(&self, user: String) -> Result<Vec<UTXO>, &'static str> {
+        let all_utxo = Transaction::get_all_utxo(user, self.clone());
+
+        if all_utxo.is_ok() {
+            Ok(all_utxo.unwrap())
+        } else {
+            Err("No money")
+        }
+    }
+
 }
