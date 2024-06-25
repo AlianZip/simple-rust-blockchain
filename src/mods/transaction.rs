@@ -1,28 +1,39 @@
 use super::{blockchain::Blockchain, utxo::UTXO};
 use chrono::Utc;
 use crypto::{digest::Digest, sha2::Sha256};
+use secp256k1::ecdsa::Signature;
+use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::hashes::{sha256, Hash};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
+
 
 //Transaction
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct Transaction {
     inputs: Vec<UTXO>,  //input UTXOs
     outputs: Vec<UTXO>, //output UTXOs
+    public_key: String,
+    signature: String,
 }
 
 
 
 impl Transaction {
-    pub(crate) fn new(amount: u64, recipient: String, from: String, blocks: Blockchain) -> Result<Transaction, &'static str> {
+    pub(crate) fn new(amount: u64, recipient: String, from: String, blocks: Blockchain, public_key: PublicKey, secret_key: SecretKey) -> Result<Transaction, &'static str> {
         if Transaction::get_max_utxo(from.clone(), blocks.clone()).is_err() && !(from == "system") {
             return Err("No money");
         } else {
             let inputs = Transaction::generate_input_utxos(from.clone(), blocks.clone(), amount.clone());
             if inputs.is_ok() {
+                let outputs = Transaction::generate_outputs_utxos(from, blocks, amount, recipient);
+                let signature = Transaction::signature_transaction(inputs.clone().unwrap(), outputs.clone(), secret_key);
                 let new_transaction: Transaction = Transaction {
                     inputs: inputs.unwrap(),
-                    outputs: Transaction::generate_outputs_utxos(from, blocks, amount, recipient) };
+                    outputs: outputs,
+                    public_key: public_key.to_string(),
+                    signature: signature.to_string()};
 
                 return Ok(new_transaction);
             } else {
@@ -186,5 +197,24 @@ impl Transaction {
                 }
             ])
         }
+    }
+
+    fn signature_transaction(inputs: Vec<UTXO>, outputs: Vec<UTXO>, secret_key: SecretKey) -> Signature {
+        let string_of_vectors = format!("{:?}{:?}", inputs, outputs); 
+
+        let secp = Secp256k1::new();
+
+        let digest = sha256::Hash::hash(string_of_vectors.as_bytes()); 
+        let message = Message::from_digest(*digest.as_byte_array());
+
+        secp.sign_ecdsa(&message, &secret_key)
+    }
+
+    fn verify_transaction(inputs: Vec<UTXO>, outputs: Vec<UTXO>, sig: String, pk: PublicKey) -> bool {
+        let secp = Secp256k1::new();
+        let string_of_vectors = format!("{:?}{:?}", inputs, outputs);
+        let digest = sha256::Hash::hash(string_of_vectors.as_bytes()); 
+        let message = Message::from_digest(*digest.as_byte_array());
+        secp.verify_ecdsa(&message, &Signature::from_str(&sig).unwrap(), &pk).is_ok()
     }
 }
